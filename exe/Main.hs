@@ -88,10 +88,10 @@ main = do
         t <- offsetTime
         hPutStrLn stderr "Starting LSP server..."
         hPutStrLn stderr "If you are seeing this in a terminal, you probably should have run ghcide WITHOUT the --lsp option!"
-        runLanguageServer options (pluginHandler plugins) onInitialConfiguration onConfigurationChange $ \getLspId event vfs caps wProg wIndefProg -> do
+        runLanguageServer options (pluginHandler plugins) onInitialConfiguration onConfigurationChange $ \getLspId event vfs caps wProg wIndefProg LSP.LspFuncs{..} -> do
             t <- t
             hPutStrLn stderr $ "Started LSP server in " ++ showDuration t
-            sessionLoader <- loadSession dir
+            sessionLoader <- loadSession $ fromMaybe dir rootPath
             let options = (defaultIdeOptions sessionLoader)
                     { optReportProgress = clientSupportsProgress caps
                     , optShakeProfiling = argsShakeProfiling

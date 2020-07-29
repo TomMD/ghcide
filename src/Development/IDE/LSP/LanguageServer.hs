@@ -46,7 +46,7 @@ runLanguageServer
     -> (InitializeRequest -> Either T.Text config)
     -> (DidChangeConfigurationNotification -> Either T.Text config)
     -> (IO LspId -> (FromServerMessage -> IO ()) -> VFSHandle -> ClientCapabilities
-        -> WithProgressFunc -> WithIndefiniteProgressFunc -> LSP.LspFuncs config -> IO IdeState)
+        -> WithProgressFunc -> WithIndefiniteProgressFunc -> Maybe FilePath -> IO IdeState)
     -> IO ()
 runLanguageServer options userHandlers onInitialConfig onConfigChange getIdeState = do
     -- Move stdout to another file descriptor and duplicate stderr
@@ -133,7 +133,7 @@ runLanguageServer options userHandlers onInitialConfig onConfigChange getIdeStat
         handleInit exitClientMsg clearReqId waitForCancel clientMsgChan lspFuncs@LSP.LspFuncs{..} = do
 
             ide <- getIdeState getNextReqId sendFunc (makeLSPVFSHandle lspFuncs) clientCapabilities
-                               withProgress withIndefiniteProgress lspFuncs
+                               withProgress withIndefiniteProgress rootPath
 
             _ <- flip forkFinally (const exitClientMsg) $ forever $ do
                 msg <- readChan clientMsgChan

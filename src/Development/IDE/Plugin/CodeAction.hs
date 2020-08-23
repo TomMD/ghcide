@@ -132,7 +132,7 @@ executeAddSignatureCommand _lsp _ideState ExecuteCommandParams{..}
 
 suggestAction
   :: Maybe DynFlags
-  -> PackageExportsMap
+  -> ExportsMap
   -> IdeOptions
   -> Maybe ParsedModule
   -> Maybe T.Text
@@ -224,7 +224,7 @@ suggestExportUnusedTopBinding srcOpt ParsedModule{pm_parsed_source = L _ HsModul
                             $ hsmodDecls
   , Just pos <- _end . getLocatedRange <$> hsmodExports
   , Just needComma <- needsComma source <$> hsmodExports
-  , let exportName = (if needComma then "," else "") <> printExport exportType name 
+  , let exportName = (if needComma then "," else "") <> printExport exportType name
         insertPos = pos {_character = pred $ _character pos}
   = [("Export ‘" <> name <> "’", [TextEdit (Range insertPos insertPos) exportName])]
   | otherwise = []
@@ -724,7 +724,7 @@ removeRedundantConstraints mContents Diagnostic{..}
 
 -------------------------------------------------------------------------------------------------
 
-suggestNewImport :: PackageExportsMap -> ParsedModule -> Diagnostic -> [(T.Text, [TextEdit])]
+suggestNewImport :: ExportsMap -> ParsedModule -> Diagnostic -> [(T.Text, [TextEdit])]
 suggestNewImport packageExportsMap ParsedModule {pm_parsed_source = L _ HsModule {..}} Diagnostic{_message}
   | msg <- unifySpaces _message
   , Just name <- extractNotInScopeName msg
@@ -744,7 +744,7 @@ suggestNewImport packageExportsMap ParsedModule {pm_parsed_source = L _ HsModule
 suggestNewImport _ _ _ = []
 
 constructNewImportSuggestions
-  :: PackageExportsMap -> NotInScope -> Maybe [T.Text] -> [T.Text]
+  :: ExportsMap -> NotInScope -> Maybe [T.Text] -> [T.Text]
 constructNewImportSuggestions exportsMap thingMissing notTheseModules = nubOrd
   [ renderNewImport identInfo m
   | (identInfo, m) <- fromMaybe [] $ Map.lookup name exportsMap

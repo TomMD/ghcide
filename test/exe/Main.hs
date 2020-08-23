@@ -1006,7 +1006,10 @@ suggestImportTests = testGroup "suggest import actions"
     , test False []         "f = quickCheck"              []                "import Test.QuickCheck (quickCheck)"
     ]
   , testGroup "want suggestion"
-    [ test True []          "f = nonEmpty"                []                "import Data.List.NonEmpty (nonEmpty)"
+    [ test True []          "f = foo"                     []                "import Foo (foo)"
+    , test True []          "f = Bar"                     []                "import Bar (Bar(Bar))"
+    , test True []          "f :: Bar"                    []                "import Bar (Bar)"
+    , test True []          "f = nonEmpty"                []                "import Data.List.NonEmpty (nonEmpty)"
     , test True []          "f = (:|)"                    []                "import Data.List.NonEmpty (NonEmpty((:|)))"
     , test True []          "f :: Natural"                ["f = undefined"] "import Numeric.Natural (Natural)"
     , test True []          "f :: NonEmpty ()"            ["f = () :| []"]  "import Data.List.NonEmpty (NonEmpty)"
@@ -1028,12 +1031,13 @@ suggestImportTests = testGroup "suggest import actions"
     ]
   ]
   where
-    test wanted imps def other newImp = testSession' (T.unpack def) $ \dir -> do
+    test wanted imps def other newImp = testSessionWithExtraFiles "hover" (T.unpack def) $ \dir -> do
       let before = T.unlines $ "module A where" : ["import " <> x | x <- imps] ++ def : other
           after  = T.unlines $ "module A where" : ["import " <> x | x <- imps] ++ [newImp] ++ def : other
-          cradle = "cradle: {direct: {arguments: [-hide-all-packages, -package, base, -package, text, -package-env, -]}}"
+          cradle = "cradle: {direct: {arguments: [-hide-all-packages, -package, base, -package, text, -package-env, -, A, Bar, Foo, GotoHover]}}"
       liftIO $ writeFileUTF8 (dir </> "hie.yaml") cradle
       doc <- createDoc "Test.hs" "haskell" before
+      void (skipManyTill anyMessage message :: Session WorkDoneProgressEndNotification)
       _diags <- waitForDiagnostics
       let defLine = length imps + 1
           range = Range (Position defLine 0) (Position defLine maxBound)
@@ -1672,8 +1676,8 @@ exportUnusedTests = testGroup "export unused actions"
         Nothing -- codeaction should not be available
     , testSession "not top-level" $ template
         (T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
-              , "{-# OPTIONS_GHC -Wunused-binds #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
+              , "{-# OPTIONS_GHC -Wunused-binds #-}"
               , "module A (foo,bar) where"
               , "foo = ()"
               , "  where bar = ()"
@@ -1708,26 +1712,26 @@ exportUnusedTests = testGroup "export unused actions"
         (R 3 0 3 3)
         "Export ‘foo’"
         (Just $ T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
               , "module A ("
               , "foo) where"
               , "foo = id"])
     , testSession "single line explicit exports" $ template
         (T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
               , "module A (foo) where"
               , "foo = id"
               , "bar = foo"])
         (R 3 0 3 3)
         "Export ‘bar’"
         (Just $ T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
               , "module A (foo,bar) where"
               , "foo = id"
               , "bar = foo"])
     , testSession "multi line explicit exports" $ template
         (T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
               , "module A"
               , "  ("
               , "    foo) where"
@@ -1736,7 +1740,7 @@ exportUnusedTests = testGroup "export unused actions"
         (R 5 0 5 3)
         "Export ‘bar’"
         (Just $ T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
               , "module A"
               , "  ("
               , "    foo,bar) where"
@@ -1744,7 +1748,7 @@ exportUnusedTests = testGroup "export unused actions"
               , "bar = foo"])
     , testSession "export list ends in comma" $ template
         (T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
               , "module A"
               , "  (foo,"
               , "  ) where"
@@ -1753,7 +1757,7 @@ exportUnusedTests = testGroup "export unused actions"
         (R 4 0 4 3)
         "Export ‘bar’"
         (Just $ T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
               , "module A"
               , "  (foo,"
               , "  bar) where"
@@ -1761,83 +1765,83 @@ exportUnusedTests = testGroup "export unused actions"
               , "bar = foo"])
     , testSession "unused pattern synonym" $ template
         (T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
-              , "{-# LANGUAGE PatternSynonyms #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
+              , "{-# LANGUAGE PatternSynonyms #-}"
               , "module A () where"
               , "pattern Foo a <- (a, _)"])
         (R 3 0 3 10)
         "Export ‘Foo’"
         (Just $ T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
-              , "{-# LANGUAGE PatternSynonyms #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
+              , "{-# LANGUAGE PatternSynonyms #-}"
               , "module A (pattern Foo) where"
               , "pattern Foo a <- (a, _)"])
     , testSession "unused data type" $ template
         (T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
               , "module A () where"
               , "data Foo = Foo"])
         (R 2 0 2 7)
         "Export ‘Foo’"
         (Just $ T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
               , "module A (Foo(..)) where"
               , "data Foo = Foo"])
     , testSession "unused newtype" $ template
         (T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
               , "module A () where"
               , "newtype Foo = Foo ()"])
         (R 2 0 2 10)
         "Export ‘Foo’"
         (Just $ T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
               , "module A (Foo(..)) where"
               , "newtype Foo = Foo ()"])
     , testSession "unused type synonym" $ template
         (T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
               , "module A () where"
               , "type Foo = ()"])
         (R 2 0 2 7)
         "Export ‘Foo’"
         (Just $ T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
               , "module A (Foo) where"
               , "type Foo = ()"])
     , testSession "unused type family" $ template
         (T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
-              , "{-# LANGUAGE TypeFamilies #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
+              , "{-# LANGUAGE TypeFamilies #-}"
               , "module A () where"
               , "type family Foo p"])
         (R 3 0 3 15)
         "Export ‘Foo’"
         (Just $ T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
-              , "{-# LANGUAGE TypeFamilies #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
+              , "{-# LANGUAGE TypeFamilies #-}"
               , "module A (Foo(..)) where"
               , "type family Foo p"])
     , testSession "unused typeclass" $ template
         (T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
               , "module A () where"
               , "class Foo a"])
         (R 2 0 2 8)
         "Export ‘Foo’"
         (Just $ T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
               , "module A (Foo(..)) where"
               , "class Foo a"])
     , testSession "infix" $ template
         (T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
               , "module A () where"
               , "a `f` b = ()"])
         (R 2 0 2 11)
         "Export ‘f’"
         (Just $ T.unlines
-              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}" 
+              [ "{-# OPTIONS_GHC -Wunused-top-binds #-}"
               , "module A (f) where"
               , "a `f` b = ()"])
     ]
@@ -2260,6 +2264,7 @@ thTests =
 -- | test that TH is reevaluated on typecheck
 thReloadingTest :: TestTree
 thReloadingTest = testCase "reloading-th-test" $ withoutStackEnv $ runWithExtraFiles "TH" $ \dir -> do
+
     let aPath = dir </> "THA.hs"
         bPath = dir </> "THB.hs"
         cPath = dir </> "THC.hs"

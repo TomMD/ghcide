@@ -58,6 +58,7 @@ import Control.Arrow ((>>>))
 import Data.Functor
 import Control.Applicative ((<|>))
 import Safe (atMay)
+import Control.Concurrent.Extra (readVar)
 
 plugin :: Plugin c
 plugin = codeActionPluginWithRules rules codeAction <> Plugin mempty setHandlersCodeLens
@@ -83,10 +84,12 @@ codeAction lsp state (TextDocumentIdentifier uri) _range CodeActionContext{_diag
             <*> use GhcSession `traverse` mbFile
     -- This is quite expensive 0.6-0.7s on GHC
     pkgExports <- runAction "CodeAction:PackageExports" state $ (useNoFile_ . PackageExports) `traverse` env
+    localExports <- readVar (exportsMap $ shakeExtras state)
+    let exportsMap = Map.unionWith (<>) localExports (fromMaybe mempty pkgExports)
     let dflags = hsc_dflags . hscEnv <$> env
     pure $ Right
         [ CACodeAction $ CodeAction title (Just CodeActionQuickFix) (Just $ List [x]) (Just edit) Nothing
-        | x <- xs, (title, tedit) <- suggestAction dflags (fromMaybe mempty pkgExports) ideOptions ( join parsedModule ) text x
+        | x <- xs, (title, tedit) <- suggestAction dflags exportsMap ideOptions ( join parsedModule ) text x
         , let edit = WorkspaceEdit (Just $ Map.singleton uri $ List tedit) Nothing
         ]
 

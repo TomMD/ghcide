@@ -30,6 +30,7 @@ module Development.IDE.GHC.Compat(
     addIncludePathsQuote,
     getModuleHash,
     getPackageName,
+    setUpTypedHoles,
     pattern DerivD,
     pattern ForD,
     pattern InstD,
@@ -298,6 +299,14 @@ dontWriteHieFiles d =
     gopt_unset d Opt_WriteHie
 #else
     d
+#endif
+
+setUpTypedHoles ::DynFlags -> DynFlags
+setUpTypedHoles df
+  = df
+#if MIN_GHC_API_VERSION(8,6,0)
+  { refLevelHoleFits = Just 2  -- GHC diagnostics become too slow for level > 2
+  }
 #endif
 
 nameListFromAvails :: [AvailInfo] -> [(SrcSpan, Name)]

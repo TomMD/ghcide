@@ -32,6 +32,7 @@ import Data.Time.Clock
 import Data.Version
 import Development.IDE.Core.OfInterest
 import Development.IDE.Core.Shake
+import Development.IDE.GHC.Compat
 import Development.IDE.GHC.Util
 import Development.IDE.Session.VersionCheck
 import Development.IDE.Types.Diagnostics
@@ -51,7 +52,6 @@ import System.FilePath
 import System.Info
 import System.IO
 
-import GHC
 import DynFlags
 import HscTypes
 import Linker
@@ -531,6 +531,7 @@ setOptions (ComponentOptions theOpts compRoot _) dflags = do
           setIgnoreInterfacePragmas $
           setLinkerOptions $
           disableOptimisation $
+          setUpTypedHoles $
           makeDynFlagsAbsolute compRoot dflags'
     -- initPackages parses the -package flags and
     -- sets up the visibility for each component.
